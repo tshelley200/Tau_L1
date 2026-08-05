@@ -4,3 +4,6 @@ ntuples/*
 verification/samples/*.root
 verification/CMSSW/CMSSW*pre*
 *__pycache__*
+*.png
+*.un~
+*.pkl

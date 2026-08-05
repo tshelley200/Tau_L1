@@ -1,4 +1,4 @@
-import uproot4
+import uproot
 import numpy as np
 import awkward as ak
 from scipy.stats import norm
