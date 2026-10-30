@@ -1,19 +1,26 @@
+# Training environment (tested: TensorFlow 2.15.1, QKeras 0.9.0, mplhep 0.4.1, Python 3.10).
+#   mamba env create -f environment.yml     (or conda env create -f environment.yml)
+#   source activate tau_nn
+# TensorFlow must stay at 2.15 (Keras 2): QKeras and this code don't work with Keras 3 (TF >= 2.16).
 name: tau_nn
+channels:
+  - conda-forge
 dependencies:
-  - python=3.8
-  - tensorflow
-  - keras
-  - scikit-learn
-  - matplotlib
+  - python=3.10
   - pip
-  - ipykernel
   - pip:
-    - numpy
-    - h5py
-    - scipy==1.5.4
-    - mplhep
-    - jupyter
-    - uproot4==4.0.0
-    - awkward==1.2.0
-    - hist[plot]
-    - coffea==0.7.1
+      - tensorflow[and-cuda]==2.15.1        # GPU build; the pip CUDA libraries come with it
+      - tensorflow-model-optimization==0.7.5
+      - qkeras==0.9.0
+      - numpy<2
+      - uproot
+      - awkward
+      - scikit-learn
+      - scipy
+      - matplotlib
+      - mplhep<1.0                          # 1.x removed hep.cms.lumitext used in plot.py
+      - hist
+      - h5py
+      - joblib
+      - ipykernel
+      # - hls4ml                            # only needed for export_hls4ml.py (firmware export)

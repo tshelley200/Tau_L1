@@ -1,0 +1,17 @@
+# One training per line:   <name>   <training.py options>
+#   - <name> must be unique: the model is saved as $MODEL_DIR/<name>.h5 and the log as logs/<name>...
+#   - --data_dir and --model_out are added automatically (from jobs/settings.sh); don't put them here
+#   - everything after a '#' is ignored; empty lines are ignored
+#   - all options: python merged_training/training.py -h   (or see the README)
+
+# --- firmware model (what runs in the trigger today), all |eta| < 2.5, with pT correction ---
+firmware_all_ptreg     --model_fn quantized_merged_model --eta_min 0 --pt_regress
+
+# --- deep sets ---
+ds_endcap_hgcal        --eta_min 1.5 --hgcal_extra                          # endcap only, HGCal shower features
+ds_barrel_calo         --eta_min 0 --eta_max 1.5 --calo_extra               # barrel only, ECal+HCal cells
+ds_all_calo_hgcal      --eta_min 0 --calo_extra --hgcal_extra --pt_regress  # one model for all |eta|
+
+# --- deep set + CNN on a calo image ---
+dscnn_barrel_ecal      --model_fn deepset_cnn --eta_min 0 --eta_max 1.5 --image ecal
+dscnn_all_hcal         --model_fn deepset_cnn --eta_min 0 --hgcal_extra --image hcal

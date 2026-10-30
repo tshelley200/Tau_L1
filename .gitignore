@@ -7,3 +7,9 @@ verification/CMSSW/CMSSW*pre*
 *.png
 *.un~
 *.pkl
+logs/
+plots/
+__pycache__/
+*.h5
+*.pkl
+*.npz

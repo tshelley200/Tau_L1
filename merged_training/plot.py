@@ -1,167 +1,167 @@
 import os
+import re
+import argparse
 from utils import *
 
-def plot_rate_data(scores_bkg, scores_sig, bkg_rate = 32e+3, label = ""):
-    
-    n_bkg_event = scores_bkg.shape[0]
-    n_sig_event = scores_sig.shape[0]
-    
-    ##LOOP to calculate the ROC curves
-    tau_score_edges = [round(i,2) for i in np.arange(0, 0.8, 0.01).tolist()]+\
+# NN score cuts scanned for the rate curve (fine steps near 1, where the useful working points are)
+TAU_SCORE_EDGES = [round(i,2) for i in np.arange(0, 0.8, 0.01).tolist()]+\
                   [round(i,4) for i in np.arange(0.9, 1, 0.0001)] + [1]
 
-    sig_list = []
-    bkg_list = []
 
-    for tau_score_cut in tau_score_edges:
-    
-        bkg_pass = np.sum(scores_bkg>tau_score_cut)
-        sig_pass = np.sum(scores_sig>tau_score_cut)
-        
-        bkg_list.append(bkg_pass/n_bkg_event)
-        sig_list.append(sig_pass/n_sig_event)
+def parse_args():
+    p = argparse.ArgumentParser(description="ROC, trigger-rate and pT-response plots on the test split")
+    # models to compare (each needs the <name>_config.json written by training.py)
+    p.add_argument("--models", nargs="+", default=["/n/holystore01/LABS/iaifi_lab/Lab/phlab-l1nntau/models/oct_22/sample_class_quant_track_extra_endcap.h5"])
+    p.add_argument("--labels", nargs="+", default=["Deepset track extra"])
 
-    
-    bkg_list_scaled = np.array(bkg_list) * bkg_rate
-    
-    plt.plot(np.array(sig_list), bkg_list_scaled, linewidth=5, label=label)
+    p.add_argument("--data_dir", default="/n/holystore01/LABS/iaifi_lab/Lab/phlab-l1nntau/L1NNTau_data/")
+    p.add_argument("--sig_file", default=None)  # default: same file as in the first model's config
+    p.add_argument("--bkg_file", default=None)
+    p.add_argument("--plot_dir", default="../plots/")
 
-
-pt_cut = 50.
-#pt_max = 60.
-pt_max = 9999.
-eta_min = 1.5
-eta_max = 5.0
-pt_norm = False
-#models = ["../models/mar6/deepset_baseline_barrel.h5", "../models/mar6/deepset_pt40_barrel.h5", "../models/mar6/deepset_pt40_ptrel_barrel.h5", "../models/mar6/deepset_pt_rw_barrel.h5"]
-#labels = ['Deepset', 'Deepset pt > 40', 'Deepset pt relative', 'Deepset pt flat' ]
-
-#models = ["../models/mar6/deepset_pt_rw_barrel.h5", "../models/mar6/deepset_track_only_barrel.h5", "../models/mar6/cnn_ecal_only_barrel.h5", "../models/mar6/cnn_hcal_only_barrel.h5"]
-#labels = ['Deepset baseline', 'Deepset track feats only', 'CNN ECal only', 'CNN HCal only' ]
-#model_str = ['deepset', 'deepset_track_only','CNN_ecal_only', 'CNN_hcal_only' ]
-
-#models = ["../models/mar6/deepset_pt_rw_barrel.h5", "../models/mar6/deepset_track_extra_barrel.h5", 
-#          "../models/mar6/deepset_cnn_ecal_extra_barrel.h5", "../models/mar6/deepset_cnn_hcal_extra_barrel.h5"]
-#labels = ['Deepset baseline', 'Deepset track extra only', 'Deepset + CNN ECal extra', 'Deepset + CNN HCal extra']
-#model_str = ['deepset', 'deepset_track_extra','deepset_cnn_ecal_extra', 'deepset_cnn_hcal_extra']
-
-#models = ["../models/mar6/deepset_baseline_endcap.h5", "../models/mar6/deepset_track_only_endcap.h5", 
-#          "../models/mar6/deepset_hgcal_only_endcap.h5"]
-#labels = ['Deepset baseline', 'Deepset track extra only', 'Deepset  HGcal extra only']
-#model_str = ['deepset', 'deepset_track_only','deepset_hgcal_only', ]
-
-models = ["../models/mar6/deepset_baseline_endcap.h5", "../models/mar6/deepset_track_extra_endcap.h5", 
-          "../models/mar6/deepset_hgcal_extra_endcap.h5"]
-labels = ['Deepset baseline', 'Deepset track extra', 'Deepset  HGcal extra']
-model_str = ['deepset', 'deepset_track_extra','deepset_hgcal_extra', ]
-
-data_dir = "../data/merged/"
-plot_dir = "../plots/endcap_feat_only_cmp/"
-test_frac = 0.3
-if(not(os.path.exists(plot_dir))): os.system("mkdir %s" % plot_dir)
+    # test-set cuts and split; default None = take them from the first model's config (so they match training)
+    for name in ["pt_cut", "pt_max", "eta_min", "eta_max", "train_frac", "val_frac", "test_frac"]:
+        p.add_argument("--" + name, type=float, default=None)
+    p.add_argument("--seed", type=int, default=None)
+    # total MinBias events processed; default: counted from the 'ntuple/tree' of the bkg file
+    p.add_argument("--n_minbias_events", type=int, default=None)
+    return p.parse_args()
 
 
-data_no_norm = create_train_test_data(data_dir, train=False, pt_cut=pt_cut, pt_max = pt_max, eta_min=eta_min, eta_max=eta_max, test_frac=test_frac, pt_norm = False)
-if(np.any(pt_norm)):
-    data_pt_norm = create_train_test_data(data_dir, train=False, pt_cut=pt_cut, pt_max = pt_max, eta_min=eta_min, eta_max=eta_max, test_frac=test_frac, pt_norm = True)
-else:
-    data_pt_norm = None
-
-_, y_test_jetID, y_test_pT_regress, sig_eff, bkg_eff  = data_no_norm['X'], data_no_norm['Y_jetID'], data_no_norm['Y_pt_corr'], data_no_norm['sig_eff'], data_no_norm['bkg_eff']
-
-scores=[]
-
-for i in range(len(models)):
-    data = data_pt_norm if 'pt_norm' in model_str else data_no_norm
-    dense = False
-    
-
-    X_test = data['X']
-    if('track_extra' in model_str[i]):
-        X_test = np.concatenate((X_test, data['track_extra']), axis = -1)
-    if('calo_extra' in model_str[i]):
-        X_test = np.concatenate((X_test, data['ecal_extra'], data['hcal_extra']), axis = -1)
-    if('ecal_extra' in model_str[i]):
-        X_test_calo = data['ecal_extra'].reshape(-1, 10, 3, 15)
-        X_test = [X_test, X_test_calo]
-
-    if('hcal_extra' in model_str[i]):
-        X_test_calo = data['hcal_extra'].reshape(-1, 10, 3, 3)
-        X_test = [X_test, X_test_calo]
-    if('hgcal_extra' in model_str[i]):
-        X_test_calo = data['ecal_extra'].reshape(X_test.shape[0], 10, -1)
-        X_test = np.concatenate((X_test, X_test_calo), axis = -1)
-    if('dense' in model_str[i]):
-        X_test = X_test.reshape(X_test.shape[0], -1)
-
-        scaler = joblib.load(models[i].replace(".h5", "_scaler.pkl"))
-        X_test = scaler.transform(X_test)
-        dense = True
-
-    if('track_only' in model_str[i]):
-        X_test = data['track_extra']
-
-    if('ecal_only' in model_str[i]):
-        X_test = data['ecal_extra'].reshape(-1, 10, 3, 15)
-    if('hcal_only' in model_str[i]):
-        X_test = data['hcal_extra'].reshape(-1, 10, 3, 3)
-    if('hgcal_only' in model_str[i]):
-        X_test = data['ecal_extra'].reshape(X_test.shape[0], 10, -1)
-        #X_test = X_test[:,:,:len(hgcal_feat_names)]
+def rate_curve(score_sig, score_bkg, bkg_event_id, n_events):
+    """Signal efficiency (per tau) and trigger rate (per EVENT: an event fires if ANY of its candidates passes)."""
+    eff = np.array([(score_sig > t).mean() for t in TAU_SCORE_EDGES])
+    if len(score_bkg):
+        _, inv = np.unique(bkg_event_id, axis=0, return_inverse=True)
+        inv = np.asarray(inv).reshape(-1)
+        ev_max = np.full(inv.max() + 1, -np.inf)
+        np.maximum.at(ev_max, inv, score_bkg)  # highest score in each event
+    else:
+        ev_max = np.array([])
+    rate = np.array([(ev_max > t).sum() for t in TAU_SCORE_EDGES]) / n_events * MINBIAS_RATE_KHZ
+    return eff, rate
 
 
-    model = load_model(models[i]) if dense else load_qmodel(models[i])
-    #print(model_str[i], X_test.shape)
-    preds = model.predict(X_test, batch_size = 256)
-
-    scores.append(preds)
-
-
-plt.figure()
-for i in range(len(labels)):
-    preds = scores[i]
-    label = labels[i]
-
-    with np.errstate(divide='ignore', invalid='ignore'):
-        fpr, tpr, _ = roc_curve(y_test_jetID, preds)
-        sic = tpr / np.sqrt(fpr)
-
-        random_tpr = np.linspace(0, 1, 300)
-        random_sic = random_tpr / np.sqrt(random_tpr)
-
-    auc_ = auc(fpr, tpr)
-    print("%s AUC %.3f" % (label, auc_))
-
-    plt.plot(fpr, tpr, label="%s (AUC = %.3f)" % (label, auc_))
-
-plt.xlabel("False Positive Rate")
-plt.ylabel("True Positive Rate")
-plt.legend(loc="best")
-plt.savefig(plot_dir + "roc_performance.png")
-	
-
-#Rate plot
-plt.figure()
-plt.plot([],[], 'none', label=r'(MinBias $p_T$ >  % d GeV, $0 < |\eta| < 1.5 $)'%int(pt_cut))
-
-min_bias_rate = 32e+3
-min_bias_selected_rate = min_bias_rate * bkg_eff
-
-for i in range(len(labels)):
-    preds = scores[i]
-    plot_rate_data(preds[y_test_jetID == 0], preds[y_test_jetID ==1], bkg_rate = min_bias_selected_rate, label = labels[i])
+def cms_labels():
+    hep.cms.text("Phase 2 Simulation")
+    try:
+        hep.cms.lumitext("PU 200 (14 TeV)")
+    except AttributeError:  # mplhep >= 1.0 removed lumitext
+        pass
 
 
-hep.cms.text("Phase 2 Simulation")
-hep.cms.lumitext("PU 200 (14 TeV)")
+def main(args):
+    if len(args.models) != len(args.labels):
+        raise ValueError("--models and --labels must have the same length")
+    cfgs = [load_config(m) for m in args.models]
 
-plt.ylabel(r'$Single \tau_h$ Trigger Rate [kHz]')
-plt.xlabel(r'$\tau_h$ [$p_T^{gen} > % d$ GeV]' %int(pt_cut))
+    # --- test settings: command line, else the first model's config ---
+    ref = cfgs[0]
+    for k in ["pt_cut", "pt_max", "eta_min", "eta_max", "train_frac", "val_frac", "test_frac", "seed", "sig_file", "bkg_file"]:
+        if getattr(args, k) is None:
+            setattr(args, k, ref[k])
+    for m, c in zip(args.models, cfgs):
+        for k in ["train_frac", "val_frac", "test_frac", "seed", "sig_file", "bkg_file"]:
+            if c[k] != getattr(args, k):
+                print("WARNING: %s was trained with %s = %s (test uses %s); its test set may overlap its training set" % (m, k, c[k], getattr(args, k)))
+    os.makedirs(args.plot_dir, exist_ok=True)
 
-plt.ylim([0.1, 1e3])
-plt.yscale('log')
-#plt.legend(loc='best',fontsize=20)
-plt.legend(loc='upper left')
-plt.savefig(plot_dir + "rate_comparison.png")
+    # --- load the test split (sig + MinBias), without and (if needed) with pt_norm ---
+    load_kw = dict(sig_file=args.sig_file, bkg_file=args.bkg_file, train_frac=args.train_frac, val_frac=args.val_frac,
+                   test_frac=args.test_frac, seed=args.seed, eta_min=args.eta_min, eta_max=args.eta_max,
+                   pt_cut=args.pt_cut, pt_max=args.pt_max)
+    data = {False: create_train_test_data(args.data_dir, split="test", pt_norm=False, **load_kw)}
+    if any(c["pt_norm"] for c in cfgs):
+        data[True] = create_train_test_data(args.data_dir, split="test", pt_norm=True, **load_kw)
+    test = data[False]
+    y, aeta = test['Y_jetID'], np.abs(test['eta'])
+
+    # MinBias events in the test split = all processed events x test fraction (events without a candidate can't fire)
+    n_test_events = count_events(os.path.join(args.data_dir, args.bkg_file), args.n_minbias_events) * args.test_frac
+    print("MinBias events in the test split: %.0f" % n_test_events)
+
+    # --- regions: always 'all'; barrel and endcap separately if the range crosses |eta| = 1.5 ---
+    regions = [("all", np.ones_like(y, bool), args.eta_min, args.eta_max)]
+    if region_of(args.eta_min, args.eta_max) == "both":
+        regions += [("barrel", aeta < BARREL_ETA, args.eta_min, BARREL_ETA),
+                    ("endcap", aeta >= BARREL_ETA, BARREL_ETA, args.eta_max)]
+
+    # --- run every model on the test set ---
+    scores, pt_factors = [], []
+    for path, label, cfg in zip(args.models, args.labels, cfgs):
+        X_test = build_inputs(data[cfg["pt_norm"]], cfg)
+        if cfg["model_fn"] == "class_model":
+            X_test = joblib.load(model_paths(path)[1]).transform(X_test)
+        model = load_qmodel(path, compile=False)
+        id_score, pt_factor = split_outputs(model.predict(X_test, batch_size = 256))
+        scores.append(id_score)
+        pt_factors.append(pt_factor)
+
+        # save test-set predictions for your own plots
+        npz = os.path.join(args.plot_dir, re.sub(r"[^A-Za-z0-9_.-]+", "_", label) + "_test.npz")
+        corr = test['reco_pt'] * pt_factor if pt_factor is not None else np.full_like(id_score, np.nan)
+        np.savez(npz, id_score=id_score, pt_factor=pt_factor if pt_factor is not None else np.full_like(id_score, np.nan),
+                 corrected_pt=corr, reco_pt=test['reco_pt'], ptcorr_cmssw=test['ptcorr'], gen_pt=test['gen_pt'],
+                 eta=test['eta'], label=y, event_id=test['event_id'])
+        print("Saved", npz)
+
+    for rname, rmask, lo, hi in regions:
+        # --- ROC ---
+        plt.figure()
+        for score, label in zip(scores, args.labels):
+            ym, sm = y[rmask], score[rmask]
+            if len(np.unique(ym)) < 2:
+                print("Skipping ROC (%s) for %s: needs both sig and bkg" % (rname, label))
+                continue
+            fpr, tpr, _ = roc_curve(ym, sm)
+            auc_ = auc(fpr, tpr)
+            print("%s [%s] AUC %.3f" % (label, rname, auc_))
+            plt.plot(fpr, tpr, label="%s (AUC = %.3f)" % (label, auc_))
+        plt.xlabel("False Positive Rate")
+        plt.ylabel("True Positive Rate")
+        plt.title(r"$%g \leq |\eta| < %g$" % (lo, hi))
+        plt.legend(loc="best")
+        plt.savefig(os.path.join(args.plot_dir, "roc_%s.png" % rname))
+        plt.close()
+
+        # --- trigger rate (per event) vs signal efficiency ---
+        plt.figure()
+        plt.plot([], [], 'none', label=r'MinBias, $p_T^{L1} > %g$ GeV, $%g \leq |\eta| < %g$' % (args.pt_cut, lo, hi))
+        bkg = rmask & (y == 0)
+        for score, label in zip(scores, args.labels):
+            eff, rate = rate_curve(score[rmask & (y == 1)], score[bkg], test['event_id'][bkg], n_test_events)
+            plt.plot(eff, rate, linewidth=5, label=label)
+        cms_labels()
+        plt.ylabel(r'Single $\tau_h$ Trigger Rate [kHz]')
+        plt.xlabel(r'$\tau_h$ efficiency ($p_T^{L1} > %g$ GeV)' % args.pt_cut)
+        plt.ylim([0.1, 1e3])
+        plt.yscale('log')
+        plt.legend(loc='upper left')
+        plt.savefig(os.path.join(args.plot_dir, "rate_%s.png" % rname))
+        plt.close()
+
+        # --- pT response for signal: L1 pT / gen pT before and after the correction ---
+        sig = rmask & (y == 1)
+        if any(f is not None for f in pt_factors) and sig.any():
+            plt.figure()
+            curves = [("L1 (raw)", test['reco_pt'][sig])]
+            if np.isfinite(test['ptcorr']).any():
+                curves.append(("CMSSW NN (ptcorr)", test['ptcorr'][sig]))
+            curves += [(label, test['reco_pt'][sig] * f[sig]) for f, label in zip(pt_factors, args.labels) if f is not None]
+            for name, pt_vals in curves:
+                r = pt_vals / test['gen_pt'][sig]
+                q16, q50, q84 = np.percentile(r, [16, 50, 84])
+                plt.hist(r, bins=60, range=(0, 3), histtype='step', density=True, linewidth=3,
+                         label="%s (median %.2f, res. %.2f)" % (name, q50, (q84 - q16) / 2 / q50))
+            plt.xlabel(r"$p_T / p_T^{gen}$")
+            plt.ylabel("a.u.")
+            plt.title(r"$%g \leq |\eta| < %g$" % (lo, hi))
+            plt.legend(loc="upper right", fontsize="small")
+            plt.savefig(os.path.join(args.plot_dir, "pt_response_%s.png" % rname))
+            plt.close()
+
+    print("Plots written to", args.plot_dir)
 
 
+if __name__ == "__main__":
+    main(parse_args())

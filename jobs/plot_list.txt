@@ -1,0 +1,8 @@
+# Models to compare in one set of plots:   <name> ; <legend label>
+#   - <name> = the name used in the job list (the model file is $MODEL_DIR/<name>.h5)
+#   - everything after a '#' is ignored; empty lines are ignored
+#   - the test cuts / split are taken from the FIRST model's settings (override with extra plot.py options)
+
+firmware_all_ptreg   ; Firmware model
+ds_all_calo_hgcal    ; Deep set (calo + HGCal)
+dscnn_all_hcal       ; Deep set + CNN (HCal image)
